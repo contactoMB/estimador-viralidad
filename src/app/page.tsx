@@ -5,6 +5,8 @@ import { useState, useRef, useEffect } from 'react'
 type Scores = { emocion: number; visual: number; audio: number; narrativa: number }
 type Etapa = { id: string; label: string; pct: number; activa: boolean; completa: boolean }
 
+const SPACE_URL = 'https://contactomundo-estimador-de-viralidad.hf.space'
+
 function getMensaje(total: number) {
   if (total < 65) return {
     color: '#ef4444',
@@ -229,7 +231,21 @@ export default function Dashboard() {
   const [loadingGuion, setLoadingGuion] = useState(false)
   const [errorGuion, setErrorGuion] = useState<string | null>(null)
   const [transcripcion, setTranscripcion] = useState<string>('')
+  const [spaceReady, setSpaceReady] = useState(false)
   const tribeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // ✅ Ping automático al Space cuando carga el dashboard
+  useEffect(() => {
+    const wakeSpace = async () => {
+      try {
+        await fetch(`${SPACE_URL}/gradio_api/queue/status`)
+        setSpaceReady(true)
+      } catch {
+        setSpaceReady(true) // igual dejamos usar aunque falle el ping
+      }
+    }
+    wakeSpace()
+  }, [])
 
   const setVideo = (file: File) => {
     setVideoFile(file)
@@ -305,6 +321,13 @@ export default function Dashboard() {
         <img src="/logo-mb.png" alt="Mundo Barefoot" style={{ height: '48px', filter: 'brightness(0) invert(1)', opacity: 0.9 }} />
       </header>
 
+      {/* Indicador de Space despertando */}
+      {!spaceReady && (
+        <div style={{ background: '#1a2e1a', borderBottom: '0.5px solid #2d4a35', padding: '8px 32px', textAlign: 'center' }}>
+          <span style={{ fontSize: '12px', color: '#4a6b52', letterSpacing: '0.1em' }}>⚡ Conectando con el servidor de análisis...</span>
+        </div>
+      )}
+
       <div style={{ maxWidth: '640px', margin: '0 auto', padding: '48px 24px' }}>
 
         {videoURL && (
@@ -357,11 +380,7 @@ export default function Dashboard() {
               <div style={{ textAlign: 'center', marginBottom: '40px' }}>
                 <div style={{ fontSize: '80px', fontWeight: 300, color: mensaje.color, lineHeight: 1 }}>{total}</div>
                 <div style={{ fontSize: '13px', color: '#4a6b52', letterSpacing: '0.18em', textTransform: 'uppercase', margin: '8px 0 12px' }}>Score de viralidad</div>
-                <div style={{
-                  display: 'inline-flex', alignItems: 'center', gap: '8px',
-                  border: `0.5px solid ${mensaje.color}`, padding: '8px 20px',
-                  marginBottom: '16px',
-                }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', border: `0.5px solid ${mensaje.color}`, padding: '8px 20px', marginBottom: '16px' }}>
                   <span style={{ fontSize: '16px' }}>{mensaje.emoji}</span>
                   <span style={{ fontSize: '12px', letterSpacing: '0.2em', textTransform: 'uppercase', color: mensaje.color, fontWeight: 700 }}>{mensaje.titulo}</span>
                 </div>
