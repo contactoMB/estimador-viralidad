@@ -232,19 +232,37 @@ export default function Dashboard() {
   const [errorGuion, setErrorGuion] = useState<string | null>(null)
   const [transcripcion, setTranscripcion] = useState<string>('')
   const [spaceReady, setSpaceReady] = useState(false)
+  const [countdown, setCountdown] = useState(60)
   const tribeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // ✅ Ping automático al Space cuando carga el dashboard
+  // ✅ Ping + contador de 60 segundos al cargar el dashboard
   useEffect(() => {
+    let segundos = 60
+    setCountdown(60)
+
+    // Contador regresivo
+    const countInterval = setInterval(() => {
+      segundos -= 1
+      setCountdown(segundos)
+      if (segundos <= 0) {
+        clearInterval(countInterval)
+        setSpaceReady(true)
+      }
+    }, 1000)
+
+    // Ping al Space para despertarlo
     const wakeSpace = async () => {
       try {
         await fetch(`${SPACE_URL}/gradio_api/queue/status`)
+        clearInterval(countInterval)
         setSpaceReady(true)
       } catch {
-        setSpaceReady(true) // igual dejamos usar aunque falle el ping
+        // Si falla el ping, el contador sigue hasta 0
       }
     }
     wakeSpace()
+
+    return () => clearInterval(countInterval)
   }, [])
 
   const setVideo = (file: File) => {
@@ -321,10 +339,21 @@ export default function Dashboard() {
         <img src="/logo-mb.png" alt="Mundo Barefoot" style={{ height: '48px', filter: 'brightness(0) invert(1)', opacity: 0.9 }} />
       </header>
 
-      {/* Indicador de Space despertando */}
+      {/* Banner de estado del Space */}
       {!spaceReady && (
-        <div style={{ background: '#1a2e1a', borderBottom: '0.5px solid #2d4a35', padding: '8px 32px', textAlign: 'center' }}>
-          <span style={{ fontSize: '12px', color: '#4a6b52', letterSpacing: '0.1em' }}>⚡ Conectando con el servidor de análisis...</span>
+        <div style={{ background: '#1a2e1a', borderBottom: '0.5px solid #2d4a35', padding: '10px 32px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px' }}>
+          <span style={{ fontSize: '12px', color: '#f5a623', letterSpacing: '0.1em' }}>⚡ Activando servidor de análisis</span>
+          <span style={{
+            fontSize: '13px', fontWeight: 700, color: '#f5a623',
+            background: '#2d4a35', padding: '2px 10px', borderRadius: '2px',
+            minWidth: '40px', textAlign: 'center'
+          }}>{countdown}s</span>
+          <span style={{ fontSize: '12px', color: '#4a6b52', letterSpacing: '0.1em' }}>Podés subir el video mientras esperas</span>
+        </div>
+      )}
+      {spaceReady && (
+        <div style={{ background: '#1a2e1a', borderBottom: '0.5px solid #2d4a35', padding: '10px 32px', textAlign: 'center' }}>
+          <span style={{ fontSize: '12px', color: '#4caf6e', letterSpacing: '0.1em' }}>✓ Servidor listo — podés analizar tu video</span>
         </div>
       )}
 
