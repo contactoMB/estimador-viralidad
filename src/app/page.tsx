@@ -76,7 +76,7 @@ const ETAPAS_INIT: Etapa[] = [
   { id: 'scores',  label: 'Calculando scores finales', pct: 0, activa: false, completa: false },
 ]
 
-const TIEMPO_TRIBEV2_MS = 300000
+const TIEMPO_TRIBEV2_MS = 360000
 
 function CerebroAnimado() {
   const mountRef = useRef<HTMLDivElement>(null)
@@ -233,9 +233,10 @@ export default function Dashboard() {
   const [transcripcion, setTranscripcion] = useState<string>('')
   const [spaceReady, setSpaceReady] = useState(false)
   const [countdown, setCountdown] = useState(60)
+  const [spaceSecret, setSpaceSecret] = useState<string>('')
   const tribeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Ping + contador de 60 segundos al cargar el dashboard
+  // Obtener el secret del Space desde Vercel + ping para despertar
   useEffect(() => {
     let segundos = 60
     setCountdown(60)
@@ -249,16 +250,23 @@ export default function Dashboard() {
       }
     }, 1000)
 
-    const wakeSpace = async () => {
+    const init = async () => {
       try {
+        // Obtener secret desde Vercel
+        const secretRes = await fetch('/api/space-secret')
+        if (secretRes.ok) {
+          const { secret } = await secretRes.json()
+          setSpaceSecret(secret || '')
+        }
+        // Ping al Space para despertarlo
         await fetch(`${SPACE_URL}/gradio_api/queue/status`)
         clearInterval(countInterval)
         setSpaceReady(true)
       } catch {
-        // Si falla el ping, el contador sigue hasta 0
+        // Si falla, el contador sigue
       }
     }
-    wakeSpace()
+    init()
 
     return () => clearInterval(countInterval)
   }, [])
@@ -278,7 +286,7 @@ export default function Dashboard() {
     setLoading(true); setEtapas(ETAPAS_INIT)
 
     try {
-      // ✅ PASO 1: Subir video DIRECTO al Space (saltando Vercel)
+      // PASO 1: Subir video DIRECTO al Space desde el browser
       setEtapaState('upload', { activa: true, pct: 10 })
       const uploadForm = new FormData()
       const cleanName = 'video_' + Date.now() + '.mp4'
@@ -289,19 +297,17 @@ export default function Dashboard() {
         method: 'POST',
         body: uploadForm,
       })
-
-      if (!uploadRes.ok) throw new Error(`Error subiendo video al Space: ${uploadRes.status}`)
+      if (!uploadRes.ok) throw new Error(`Error subiendo video: ${uploadRes.status}`)
       const uploaded = await uploadRes.json()
       const filePath = uploaded[0]
-
       setEtapaState('upload', { activa: false, completa: true, pct: 100 })
 
       // PASO 2: Audio
       setEtapaState('audio', { activa: true, pct: 10 })
-      await new Promise(r => setTimeout(r, 2000))
+      await new Promise(r => setTimeout(r, 1500))
       setEtapaState('audio', { activa: false, completa: true, pct: 100 })
 
-      // PASO 3: TribeV2 — llamar a Vercel con solo el filePath
+      // PASO 3: Llamar al modelo DIRECTO desde el browser al Space
       setEtapaState('tribev2', { activa: true, pct: 1 })
       let tribePct = 1
       tribeTimerRef.current = setInterval(() => {
@@ -309,11 +315,29 @@ export default function Dashboard() {
         setEtapaState('tribev2', { pct: tribePct })
       }, TIEMPO_TRIBEV2_MS / 95)
 
-      const res = await fetch('/api/analizar', {
+      // Llamada directa al Space
+      const predictRes = await fetch(`${SPACE_URL}/gradio_api/call/analizar_video`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filePath }),
+        body: JSON.stringify({
+          data: [
+            { path: filePath, meta: { _type: 'gradio.FileData' } },
+            spaceSecret
+          ]
+        }),
       })
+      if (!predictRes.ok) throw new Error(`Error prediciendo: ${predictRes.status}`)
+      const { event_id } = await predictRes.json()
+
+      // Obtener resultado del Space
+      const resultRes = await fetch(`${SPACE_URL}/gradio_api/call/analizar_video/${event_id}`)
+      const text = await resultRes.text()
+      const lines = text.split('\n').filter((l: string) => l.startsWith('data:'))
+      const lastLine = lines[lines.length - 1]
+      const resultData = JSON.parse(lastLine.replace('data: ', ''))
+      const jsonString = resultData[0]
+      const resultado = JSON.parse(jsonString)
+      if (resultado.error) throw new Error(resultado.error)
 
       if (tribeTimerRef.current) clearInterval(tribeTimerRef.current)
       setEtapaState('tribev2', { activa: false, completa: true, pct: 100 })
@@ -325,13 +349,12 @@ export default function Dashboard() {
 
       // PASO 5: Scores
       setEtapaState('scores', { activa: true, pct: 50 })
-      const data = await res.json()
       await new Promise(r => setTimeout(r, 400))
       setEtapaState('scores', { activa: false, completa: true, pct: 100 })
 
-      setScores(data.scores)
-      setTotal(data.total)
-      setTranscripcion(data.transcripcion || '')
+      setScores(resultado.scores)
+      setTotal(resultado.total)
+      setTranscripcion(resultado.transcripcion || '')
 
     } catch (err) {
       console.error(err)
@@ -370,7 +393,6 @@ export default function Dashboard() {
         <img src="/logo-mb.png" alt="Mundo Barefoot" style={{ height: '48px', filter: 'brightness(0) invert(1)', opacity: 0.9 }} />
       </header>
 
-      {/* Banner de estado del Space */}
       {!spaceReady && (
         <div style={{ background: '#1a2e1a', borderBottom: '0.5px solid #2d4a35', padding: '10px 32px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px' }}>
           <span style={{ fontSize: '12px', color: '#f5a623', letterSpacing: '0.1em' }}>⚡ Activando servidor de análisis</span>
