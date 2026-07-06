@@ -235,12 +235,11 @@ export default function Dashboard() {
   const [countdown, setCountdown] = useState(60)
   const tribeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // ✅ Ping + contador de 60 segundos al cargar el dashboard
+  // Ping + contador de 60 segundos al cargar el dashboard
   useEffect(() => {
     let segundos = 60
     setCountdown(60)
 
-    // Contador regresivo
     const countInterval = setInterval(() => {
       segundos -= 1
       setCountdown(segundos)
@@ -250,7 +249,6 @@ export default function Dashboard() {
       }
     }, 1000)
 
-    // Ping al Space para despertarlo
     const wakeSpace = async () => {
       try {
         await fetch(`${SPACE_URL}/gradio_api/queue/status`)
@@ -278,34 +276,67 @@ export default function Dashboard() {
   const handleAnalizar = async () => {
     if (!videoFile) return
     setLoading(true); setEtapas(ETAPAS_INIT)
-    setEtapaState('upload', { activa: true, pct: 5 })
-    let uploadPct = 5
-    const uploadTimer = setInterval(() => { uploadPct = Math.min(uploadPct + 20, 90); setEtapaState('upload', { pct: uploadPct }) }, 400)
+
     try {
-      const formData = new FormData(); formData.append('video', videoFile)
-      const fetchPromise = fetch('/api/analizar', { method: 'POST', body: formData })
-      await new Promise(r => setTimeout(r, 2000))
-      clearInterval(uploadTimer); setEtapaState('upload', { activa: false, completa: true, pct: 100 })
+      // ✅ PASO 1: Subir video DIRECTO al Space (saltando Vercel)
+      setEtapaState('upload', { activa: true, pct: 10 })
+      const uploadForm = new FormData()
+      const cleanName = 'video_' + Date.now() + '.mp4'
+      const videoFile2 = new File([videoFile], cleanName, { type: videoFile.type || 'video/mp4' })
+      uploadForm.append('files', videoFile2)
+
+      const uploadRes = await fetch(`${SPACE_URL}/gradio_api/upload`, {
+        method: 'POST',
+        body: uploadForm,
+      })
+
+      if (!uploadRes.ok) throw new Error(`Error subiendo video al Space: ${uploadRes.status}`)
+      const uploaded = await uploadRes.json()
+      const filePath = uploaded[0]
+
+      setEtapaState('upload', { activa: false, completa: true, pct: 100 })
+
+      // PASO 2: Audio
       setEtapaState('audio', { activa: true, pct: 10 })
-      await new Promise(r => setTimeout(r, 3000))
+      await new Promise(r => setTimeout(r, 2000))
       setEtapaState('audio', { activa: false, completa: true, pct: 100 })
+
+      // PASO 3: TribeV2 — llamar a Vercel con solo el filePath
       setEtapaState('tribev2', { activa: true, pct: 1 })
       let tribePct = 1
-      tribeTimerRef.current = setInterval(() => { tribePct = Math.min(tribePct + 1, 95); setEtapaState('tribev2', { pct: tribePct }) }, TIEMPO_TRIBEV2_MS / 95)
-      const res = await fetchPromise
+      tribeTimerRef.current = setInterval(() => {
+        tribePct = Math.min(tribePct + 1, 95)
+        setEtapaState('tribev2', { pct: tribePct })
+      }, TIEMPO_TRIBEV2_MS / 95)
+
+      const res = await fetch('/api/analizar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filePath }),
+      })
+
       if (tribeTimerRef.current) clearInterval(tribeTimerRef.current)
       setEtapaState('tribev2', { activa: false, completa: true, pct: 100 })
+
+      // PASO 4: Visual
       setEtapaState('visual', { activa: true, pct: 20 })
       await new Promise(r => setTimeout(r, 800))
       setEtapaState('visual', { activa: false, completa: true, pct: 100 })
+
+      // PASO 5: Scores
       setEtapaState('scores', { activa: true, pct: 50 })
       const data = await res.json()
       await new Promise(r => setTimeout(r, 400))
       setEtapaState('scores', { activa: false, completa: true, pct: 100 })
+
       setScores(data.scores)
       setTotal(data.total)
       setTranscripcion(data.transcripcion || '')
-    } catch (err) { console.error(err); if (tribeTimerRef.current) clearInterval(tribeTimerRef.current) }
+
+    } catch (err) {
+      console.error(err)
+      if (tribeTimerRef.current) clearInterval(tribeTimerRef.current)
+    }
     setLoading(false)
   }
 
@@ -343,11 +374,7 @@ export default function Dashboard() {
       {!spaceReady && (
         <div style={{ background: '#1a2e1a', borderBottom: '0.5px solid #2d4a35', padding: '10px 32px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px' }}>
           <span style={{ fontSize: '12px', color: '#f5a623', letterSpacing: '0.1em' }}>⚡ Activando servidor de análisis</span>
-          <span style={{
-            fontSize: '13px', fontWeight: 700, color: '#f5a623',
-            background: '#2d4a35', padding: '2px 10px', borderRadius: '2px',
-            minWidth: '40px', textAlign: 'center'
-          }}>{countdown}s</span>
+          <span style={{ fontSize: '13px', fontWeight: 700, color: '#f5a623', background: '#2d4a35', padding: '2px 10px', borderRadius: '2px', minWidth: '40px', textAlign: 'center' }}>{countdown}s</span>
           <span style={{ fontSize: '12px', color: '#4a6b52', letterSpacing: '0.1em' }}>Podés subir el video mientras esperas</span>
         </div>
       )}
