@@ -40,7 +40,7 @@ export default function Login() {
       {/* Logo */}
       <div style={{ marginBottom: '80px', textAlign: 'center' }}>
         <img
-          src="/logo-mb.png"
+          src="https://mundobarefoot.cl/cdn/shop/files/ORIGINAL_MUNDO_BAREFOOT_Mesa_de_trabajo_1_copia_2.png"
           alt="Mundo Barefoot"
           style={{ height: '56px', filter: 'brightness(0) invert(1)', opacity: 0.9 }}
         />
