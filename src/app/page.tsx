@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
 
 type Scores = { emocion: number; visual: number; audio: number; narrativa: number }
 type Etapa = { id: string; label: string; pct: number; activa: boolean; completa: boolean }
@@ -153,7 +152,6 @@ function CerebroAnimado() {
 }
 
 export default function Dashboard() {
-  const router = useRouter()
   const [dragging, setDragging] = useState(false)
   const [videoFile, setVideoFile] = useState<File | null>(null)
   const [videoURL, setVideoURL] = useState<string | null>(null)
@@ -170,10 +168,10 @@ export default function Dashboard() {
   const tribeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // ✅ Cerrar sesión
+  // ✅ Cerrar sesión — recarga completa para forzar re-evaluación del middleware
   const handleLogout = async () => {
     await fetch('/api/logout', { method: 'POST' })
-    router.push('/login')
+    window.location.href = '/login'
   }
 
   // ✅ Auto-logout por inactividad
@@ -214,7 +212,6 @@ export default function Dashboard() {
   // ✅ Despertar el Space activamente
   const wakeSpace = async () => {
     setSpaceStatus('waking')
-    // Intentar varias veces durante 2 minutos
     for (let i = 0; i < 24; i++) {
       try {
         const res = await fetch(`${SPACE_URL}/gradio_api/queue/status`, {
