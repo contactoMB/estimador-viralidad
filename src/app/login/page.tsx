@@ -1,13 +1,38 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+
+const SPACE_URL = 'https://contactomundo-estimador-de-viralidad.hf.space'
+
+type SpaceStatus = 'checking' | 'ready' | 'sleeping' | 'error'
 
 export default function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [spaceStatus, setSpaceStatus] = useState<SpaceStatus>('checking')
   const router = useRouter()
+
+  useEffect(() => {
+    checkSpaceStatus()
+  }, [])
+
+  const checkSpaceStatus = async () => {
+    setSpaceStatus('checking')
+    try {
+      const res = await fetch(`${SPACE_URL}/gradio_api/queue/status`, {
+        signal: AbortSignal.timeout(10000)
+      })
+      if (res.ok) {
+        setSpaceStatus('ready')
+      } else {
+        setSpaceStatus('sleeping')
+      }
+    } catch {
+      setSpaceStatus('sleeping')
+    }
+  }
 
   const handleLogin = async () => {
     if (!password) return
@@ -34,16 +59,32 @@ export default function Login() {
     if (e.key === 'Enter') handleLogin()
   }
 
+  const statusConfig = {
+    checking: { color: '#f5a623', dot: '#f5a623', text: 'Verificando servidor...' },
+    ready:    { color: '#4caf6e', dot: '#4caf6e', text: 'Servidor listo' },
+    sleeping: { color: '#ef4444', dot: '#ef4444', text: 'Servidor dormido — puede tardar ~1 min en despertar' },
+    error:    { color: '#ef4444', dot: '#ef4444', text: 'Error de conexión' },
+  }
+
+  const status = statusConfig[spaceStatus]
+
   return (
     <main style={{ minHeight: '100vh', background: '#111f14', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
 
+      {/* Status del Space */}
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, background: '#1a2e1a', borderBottom: '0.5px solid #2d4a35', padding: '8px 32px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}>
+        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: status.dot }} />
+        <span style={{ fontSize: '12px', color: status.color, letterSpacing: '0.1em' }}>{status.text}</span>
+        {spaceStatus === 'sleeping' && (
+          <button onClick={checkSpaceStatus} style={{ marginLeft: '8px', fontSize: '11px', color: '#f5a623', background: 'transparent', border: '0.5px solid #f5a623', padding: '2px 10px', cursor: 'pointer', letterSpacing: '0.1em' }}>
+            Reintentar
+          </button>
+        )}
+      </div>
+
       {/* Logo */}
-      <div style={{ marginBottom: '80px', textAlign: 'center' }}>
-        <img
-          src="https://mundobarefoot.cl/cdn/shop/files/ORIGINAL_MUNDO_BAREFOOT_Mesa_de_trabajo_1_copia_2.png"
-          alt="Mundo Barefoot"
-          style={{ height: '56px', filter: 'brightness(0) invert(1)', opacity: 0.9 }}
-        />
+      <div style={{ marginBottom: '48px', textAlign: 'center' }}>
+        <img src="/logo-mb.png" alt="Mundo Barefoot" style={{ height: '56px', filter: 'brightness(0) invert(1)', opacity: 0.9 }} />
       </div>
 
       {/* Título */}
@@ -105,7 +146,6 @@ export default function Login() {
           {loading ? 'Verificando...' : 'Entrar'}
         </button>
       </div>
-
     </main>
   )
 }

@@ -1,35 +1,30 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 
 type Scores = { emocion: number; visual: number; audio: number; narrativa: number }
 type Etapa = { id: string; label: string; pct: number; activa: boolean; completa: boolean }
+type SpaceStatus = 'checking' | 'ready' | 'sleeping' | 'waking' | 'error'
 
 const SPACE_URL = 'https://contactomundo-estimador-de-viralidad.hf.space'
+const INACTIVITY_LIMIT = 15 * 60 * 1000 // 15 minutos en ms
 
 function getMensaje(total: number) {
   if (total < 65) return {
-    color: '#ef4444',
-    emoji: '🚫',
-    titulo: 'NO TESTEAR',
+    color: '#ef4444', emoji: '🚫', titulo: 'NO TESTEAR',
     texto: 'El cerebro no engancha. Este video no tiene el estimulo minimo para detener el scroll. Reescribir antes de invertir.',
   }
   if (total < 75) return {
-    color: '#f5a623',
-    emoji: '⚠️',
-    titulo: 'TESTEAR CON MONITOREO',
+    color: '#f5a623', emoji: '⚠️', titulo: 'TESTEAR CON MONITOREO',
     texto: 'Hay senal, pero debil. Lanza con presupuesto minimo y medi las primeras 6 horas antes de escalar.',
   }
   if (total < 85) return {
-    color: '#4caf6e',
-    emoji: '🚀',
-    titulo: 'LANZAR',
+    color: '#4caf6e', emoji: '🚀', titulo: 'LANZAR',
     texto: 'Activacion cerebral alta. Este video tiene lo necesario para generar resultados reales. Verde para lanzar.',
   }
   return {
-    color: '#f5a623',
-    emoji: '🔥',
-    titulo: 'CONTENIDO ESTRELLA',
+    color: '#f5a623', emoji: '🔥', titulo: 'CONTENIDO ESTRELLA',
     texto: 'Esto es un activo. Alta activacion en todas las dimensiones. Escala el presupuesto sin dudar.',
   }
 }
@@ -90,73 +85,32 @@ function CerebroAnimado() {
     const init = () => {
       const THREE = (window as any).THREE
       if (!THREE || !el) return
-
       const w = el.offsetWidth || 500
       const h = 220
-
       const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
       renderer.setSize(w, h)
       renderer.setClearColor(0x000000, 0)
       el.appendChild(renderer.domElement)
-
       const scene = new THREE.Scene()
       const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 100)
       camera.position.z = 4.5
-
       const cerebro = new THREE.Group()
       scene.add(cerebro)
-
       const matWire = new THREE.MeshBasicMaterial({ color: 0xaaffcc, wireframe: true, transparent: true, opacity: 0.18 })
-
       const hemiLGeo = new THREE.SphereGeometry(0.88, 18, 14, 0, Math.PI)
       hemiLGeo.scale(1.1, 0.92, 1.0)
       const hemiL = new THREE.Mesh(hemiLGeo, matWire)
       hemiL.position.set(-0.15, 0.05, 0)
       cerebro.add(hemiL)
-
       const hemiRGeo = new THREE.SphereGeometry(0.88, 18, 14, Math.PI, Math.PI)
       hemiRGeo.scale(1.1, 0.92, 1.0)
       const hemiR = new THREE.Mesh(hemiRGeo, matWire)
       hemiR.position.set(0.15, 0.05, 0)
       cerebro.add(hemiR)
-
-      const cerebeloGeo = new THREE.SphereGeometry(0.35, 12, 10)
-      cerebeloGeo.scale(1.3, 0.65, 0.85)
-      const cerebelo = new THREE.Mesh(cerebeloGeo, new THREE.MeshBasicMaterial({ color: 0xaaffcc, wireframe: true, transparent: true, opacity: 0.12 }))
-      cerebelo.position.set(0, -0.72, -0.5)
-      cerebro.add(cerebelo)
-
-      const surcoMat = new THREE.MeshBasicMaterial({ color: 0x88ffbb, wireframe: true, transparent: true, opacity: 0.22 })
-      const surcos = [
-        { r: 0.9, arc: 0.65, rx: 0.15, ry: 0.0, rz: 0.0, px: -0.15, py: 0.15 },
-        { r: 0.9, arc: 0.55, rx: -0.25, ry: 0.4, rz: 0.2, px: -0.15, py: 0.35 },
-        { r: 0.9, arc: 0.75, rx: 0.45, ry: -0.15, rz: 0.1, px: -0.15, py: -0.05 },
-        { r: 0.9, arc: 0.6, rx: 0.1, ry: 0.7, rz: -0.15, px: -0.15, py: 0.25 },
-        { r: 0.9, arc: 0.65, rx: 0.15, ry: 0.0, rz: 0.0, px: 0.15, py: 0.15 },
-        { r: 0.9, arc: 0.7, rx: -0.25, ry: 0.4, rz: 0.2, px: 0.15, py: 0.35 },
-        { r: 0.9, arc: 0.5, rx: 0.45, ry: -0.15, rz: 0.1, px: 0.15, py: -0.05 },
-        { r: 0.9, arc: 0.8, rx: 0.1, ry: 0.7, rz: -0.15, px: 0.15, py: 0.25 },
-      ]
-      surcos.forEach(s => {
-        const geo = new THREE.TorusGeometry(s.r, 0.03, 4, 18, Math.PI * s.arc)
-        const mesh = new THREE.Mesh(geo, surcoMat)
-        mesh.rotation.set(s.rx, s.ry, s.rz)
-        mesh.position.set(s.px, s.py, 0)
-        cerebro.add(mesh)
-      })
-
-      const nodePositions = [
-        [0.6, 0.45, 0.5], [-0.6, 0.45, 0.5],
-        [0.65, 0.0, 0.35], [-0.65, 0.0, 0.35],
-        [0.4, -0.25, 0.6], [-0.4, -0.25, 0.6],
-        [0.2, 0.6, 0.1], [-0.2, 0.6, 0.1],
-        [0.55, 0.3, -0.2], [-0.55, 0.3, -0.2],
-        [0.0, 0.1, 0.85], [0.0, -0.1, 0.85],
-      ]
+      const nodePositions = [[0.6,0.45,0.5],[-0.6,0.45,0.5],[0.65,0.0,0.35],[-0.65,0.0,0.35],[0.4,-0.25,0.6],[-0.4,-0.25,0.6],[0.2,0.6,0.1],[-0.2,0.6,0.1],[0.55,0.3,-0.2],[-0.55,0.3,-0.2],[0.0,0.1,0.85],[0.0,-0.1,0.85]]
       const nodeMats: any[] = []
-      const nodeColors = [0xf5a623, 0x4caf6e, 0xffffff, 0xf5a623, 0x4caf6e, 0xffffff, 0xf5a623, 0x4caf6e, 0xffffff, 0xf5a623, 0x4caf6e, 0xffffff]
+      const nodeColors = [0xf5a623,0x4caf6e,0xffffff,0xf5a623,0x4caf6e,0xffffff,0xf5a623,0x4caf6e,0xffffff,0xf5a623,0x4caf6e,0xffffff]
       const nodeMeshes: any[] = []
-
       nodePositions.forEach((pos, i) => {
         const mat = new THREE.MeshBasicMaterial({ color: nodeColors[i], transparent: true, opacity: 0.9 })
         const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 8), mat)
@@ -165,24 +119,6 @@ function CerebroAnimado() {
         nodeMats.push({ mat, fase: Math.random() * Math.PI * 2 })
         nodeMeshes.push(mesh)
       })
-
-      const lineMat = new THREE.LineBasicMaterial({ color: 0x55cc88, transparent: true, opacity: 0.25 })
-      const conexiones = [[0,1],[0,2],[1,3],[2,4],[3,5],[4,10],[5,10],[6,0],[7,1],[8,2],[9,3],[10,11],[0,6],[1,7]]
-      conexiones.forEach(([a, b]) => {
-        const points = [
-          new THREE.Vector3(...nodePositions[a] as [number, number, number]),
-          new THREE.Vector3(...nodePositions[b] as [number, number, number]),
-        ]
-        const geo = new THREE.BufferGeometry().setFromPoints(points)
-        cerebro.add(new THREE.Line(geo, lineMat))
-      })
-
-      const pGeo = new THREE.BufferGeometry()
-      const pPos = new Float32Array(60 * 3)
-      for (let i = 0; i < 60; i++) { pPos[i*3] = (Math.random()-0.5)*8; pPos[i*3+1] = (Math.random()-0.5)*4; pPos[i*3+2] = (Math.random()-0.5)*3 }
-      pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3))
-      scene.add(new THREE.Points(pGeo, new THREE.PointsMaterial({ color: 0x4caf6e, size: 0.018, transparent: true, opacity: 0.3 })))
-
       let frame = 0
       let animId: number
       const animate = () => {
@@ -202,10 +138,8 @@ function CerebroAnimado() {
     }
 
     const existing = document.getElementById('three-mb')
-    if (existing) {
-      if ((window as any).THREE) init()
-      else existing.addEventListener('load', init)
-    } else {
+    if (existing) { if ((window as any).THREE) init(); else existing.addEventListener('load', init) }
+    else {
       const s = document.createElement('script')
       s.id = 'three-mb'
       s.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'
@@ -218,8 +152,8 @@ function CerebroAnimado() {
   return <div ref={mountRef} style={{ width: '100%', height: '220px' }} />
 }
 
-
 export default function Dashboard() {
+  const router = useRouter()
   const [dragging, setDragging] = useState(false)
   const [videoFile, setVideoFile] = useState<File | null>(null)
   const [videoURL, setVideoURL] = useState<string | null>(null)
@@ -231,83 +165,117 @@ export default function Dashboard() {
   const [loadingGuion, setLoadingGuion] = useState(false)
   const [errorGuion, setErrorGuion] = useState<string | null>(null)
   const [transcripcion, setTranscripcion] = useState<string>('')
-  const [spaceReady, setSpaceReady] = useState(false)
-  const [countdown, setCountdown] = useState(60)
+  const [spaceStatus, setSpaceStatus] = useState<SpaceStatus>('checking')
   const [spaceSecret, setSpaceSecret] = useState<string>('')
   const tribeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Obtener el secret del Space desde Vercel + ping para despertar
+  // ✅ Cerrar sesión
+  const handleLogout = async () => {
+    await fetch('/api/logout', { method: 'POST' })
+    router.push('/login')
+  }
+
+  // ✅ Auto-logout por inactividad
+  const resetInactivityTimer = useCallback(() => {
+    if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current)
+    inactivityTimerRef.current = setTimeout(() => {
+      handleLogout()
+    }, INACTIVITY_LIMIT)
+  }, [])
+
   useEffect(() => {
-    let segundos = 60
-    setCountdown(60)
+    resetInactivityTimer()
+    const events = ['mousedown', 'keydown', 'scroll', 'touchstart']
+    events.forEach(e => window.addEventListener(e, resetInactivityTimer))
+    return () => {
+      events.forEach(e => window.removeEventListener(e, resetInactivityTimer))
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current)
+    }
+  }, [resetInactivityTimer])
 
-    const countInterval = setInterval(() => {
-      segundos -= 1
-      setCountdown(segundos)
-      if (segundos <= 0) {
-        clearInterval(countInterval)
-        setSpaceReady(true)
+  // ✅ Verificar estado real del Space
+  const checkSpaceStatus = async () => {
+    setSpaceStatus('checking')
+    try {
+      const res = await fetch(`${SPACE_URL}/gradio_api/queue/status`, {
+        signal: AbortSignal.timeout(10000)
+      })
+      if (res.ok) {
+        setSpaceStatus('ready')
+      } else {
+        setSpaceStatus('sleeping')
       }
-    }, 1000)
+    } catch {
+      setSpaceStatus('sleeping')
+    }
+  }
 
+  // ✅ Despertar el Space activamente
+  const wakeSpace = async () => {
+    setSpaceStatus('waking')
+    // Intentar varias veces durante 2 minutos
+    for (let i = 0; i < 24; i++) {
+      try {
+        const res = await fetch(`${SPACE_URL}/gradio_api/queue/status`, {
+          signal: AbortSignal.timeout(8000)
+        })
+        if (res.ok) {
+          setSpaceStatus('ready')
+          return
+        }
+      } catch {}
+      await new Promise(r => setTimeout(r, 5000))
+    }
+    setSpaceStatus('error')
+  }
+
+  useEffect(() => {
     const init = async () => {
       try {
-        // Obtener secret desde Vercel
         const secretRes = await fetch('/api/space-secret')
         if (secretRes.ok) {
           const { secret } = await secretRes.json()
           setSpaceSecret(secret || '')
         }
-        // Ping al Space para despertarlo
-        await fetch(`${SPACE_URL}/gradio_api/queue/status`)
-        clearInterval(countInterval)
-        setSpaceReady(true)
-      } catch {
-        // Si falla, el contador sigue
-      }
+      } catch {}
+      checkSpaceStatus()
     }
     init()
-
-    return () => clearInterval(countInterval)
   }, [])
 
   const setVideo = (file: File) => {
-    setVideoFile(file)
-    setVideoURL(URL.createObjectURL(file))
+    setVideoFile(file); setVideoURL(URL.createObjectURL(file))
     setScores(null); setTotal(null); setGuion(null)
     setErrorGuion(null); setEtapas(ETAPAS_INIT); setTranscripcion('')
+    resetInactivityTimer()
   }
   const handleDrop = (e: React.DragEvent) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f?.type.startsWith('video/')) setVideo(f) }
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => { const f = e.target.files?.[0]; if (f) setVideo(f) }
   const setEtapaState = (id: string, patch: Partial<Etapa>) => setEtapas(prev => prev.map(e => e.id === id ? { ...e, ...patch } : e))
 
   const handleAnalizar = async () => {
-    if (!videoFile) return
+    if (!videoFile || spaceStatus !== 'ready') return
     setLoading(true); setEtapas(ETAPAS_INIT)
+    resetInactivityTimer()
 
     try {
-      // PASO 1: Subir video DIRECTO al Space desde el browser
       setEtapaState('upload', { activa: true, pct: 10 })
       const uploadForm = new FormData()
       const cleanName = 'video_' + Date.now() + '.mp4'
       const videoFile2 = new File([videoFile], cleanName, { type: videoFile.type || 'video/mp4' })
       uploadForm.append('files', videoFile2)
 
-      const uploadRes = await fetch(`${SPACE_URL}/gradio_api/upload`, {
-        method: 'POST',
-        body: uploadForm,
-      })
+      const uploadRes = await fetch(`${SPACE_URL}/gradio_api/upload`, { method: 'POST', body: uploadForm })
       if (!uploadRes.ok) throw new Error(`Error subiendo video: ${uploadRes.status}`)
       const uploaded = await uploadRes.json()
       const filePath = uploaded[0]
       setEtapaState('upload', { activa: false, completa: true, pct: 100 })
 
-      // PASO 2: Audio
       setEtapaState('audio', { activa: true, pct: 10 })
       await new Promise(r => setTimeout(r, 1500))
       setEtapaState('audio', { activa: false, completa: true, pct: 100 })
 
-      // PASO 3: Llamar al modelo DIRECTO desde el browser al Space
       setEtapaState('tribev2', { activa: true, pct: 1 })
       let tribePct = 1
       tribeTimerRef.current = setInterval(() => {
@@ -315,39 +283,29 @@ export default function Dashboard() {
         setEtapaState('tribev2', { pct: tribePct })
       }, TIEMPO_TRIBEV2_MS / 95)
 
-      // Llamada directa al Space
       const predictRes = await fetch(`${SPACE_URL}/gradio_api/call/analizar_video`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          data: [
-            { path: filePath, meta: { _type: 'gradio.FileData' } },
-            spaceSecret
-          ]
-        }),
+        body: JSON.stringify({ data: [{ path: filePath, meta: { _type: 'gradio.FileData' } }, spaceSecret] }),
       })
       if (!predictRes.ok) throw new Error(`Error prediciendo: ${predictRes.status}`)
       const { event_id } = await predictRes.json()
 
-      // Obtener resultado del Space
       const resultRes = await fetch(`${SPACE_URL}/gradio_api/call/analizar_video/${event_id}`)
       const text = await resultRes.text()
       const lines = text.split('\n').filter((l: string) => l.startsWith('data:'))
       const lastLine = lines[lines.length - 1]
       const resultData = JSON.parse(lastLine.replace('data: ', ''))
-      const jsonString = resultData[0]
-      const resultado = JSON.parse(jsonString)
+      const resultado = JSON.parse(resultData[0])
       if (resultado.error) throw new Error(resultado.error)
 
       if (tribeTimerRef.current) clearInterval(tribeTimerRef.current)
       setEtapaState('tribev2', { activa: false, completa: true, pct: 100 })
 
-      // PASO 4: Visual
       setEtapaState('visual', { activa: true, pct: 20 })
       await new Promise(r => setTimeout(r, 800))
       setEtapaState('visual', { activa: false, completa: true, pct: 100 })
 
-      // PASO 5: Scores
       setEtapaState('scores', { activa: true, pct: 50 })
       await new Promise(r => setTimeout(r, 400))
       setEtapaState('scores', { activa: false, completa: true, pct: 100 })
@@ -355,10 +313,12 @@ export default function Dashboard() {
       setScores(resultado.scores)
       setTotal(resultado.total)
       setTranscripcion(resultado.transcripcion || '')
+      resetInactivityTimer()
 
     } catch (err) {
       console.error(err)
       if (tribeTimerRef.current) clearInterval(tribeTimerRef.current)
+      setSpaceStatus('sleeping')
     }
     setLoading(false)
   }
@@ -382,29 +342,47 @@ export default function Dashboard() {
     setVideoFile(null); setVideoURL(null); setScores(null); setTotal(null)
     setGuion(null); setErrorGuion(null); setEtapas(ETAPAS_INIT); setTranscripcion('')
     if (tribeTimerRef.current) clearInterval(tribeTimerRef.current)
+    resetInactivityTimer()
   }
 
   const mensaje = total !== null ? getMensaje(total) : null
 
+  const statusConfig: Record<SpaceStatus, { color: string; dot: string; text: string }> = {
+    checking: { color: '#f5a623', dot: '#f5a623', text: 'Verificando servidor...' },
+    ready:    { color: '#4caf6e', dot: '#4caf6e', text: 'Servidor listo — podés analizar tu video' },
+    sleeping: { color: '#ef4444', dot: '#ef4444', text: 'Servidor dormido' },
+    waking:   { color: '#f5a623', dot: '#f5a623', text: 'Despertando servidor...' },
+    error:    { color: '#ef4444', dot: '#ef4444', text: 'Error de conexión con el servidor' },
+  }
+  const status = statusConfig[spaceStatus]
+
   return (
     <main style={{ minHeight: '100vh', background: '#111f14' }}>
+
+      {/* Header */}
       <header style={{ borderBottom: '0.5px solid #2d4a35', padding: '14px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ fontSize: '16px', letterSpacing: '0.2em', textTransform: 'uppercase', color: '#e8f5e9', fontWeight: 700 }}>Estimador de Viralidad</span>
-        <img src="/logo-mb.png" alt="Mundo Barefoot" style={{ height: '48px', filter: 'brightness(0) invert(1)', opacity: 0.9 }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+          <img src="/logo-mb.png" alt="Mundo Barefoot" style={{ height: '48px', filter: 'brightness(0) invert(1)', opacity: 0.9 }} />
+          <button onClick={handleLogout} style={{ background: 'transparent', border: '0.5px solid #2d4a35', color: '#4a6b52', padding: '6px 16px', fontSize: '12px', letterSpacing: '0.15em', textTransform: 'uppercase', cursor: 'pointer' }}>
+            Cerrar sesión
+          </button>
+        </div>
       </header>
 
-      {!spaceReady && (
-        <div style={{ background: '#1a2e1a', borderBottom: '0.5px solid #2d4a35', padding: '10px 32px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px' }}>
-          <span style={{ fontSize: '12px', color: '#f5a623', letterSpacing: '0.1em' }}>⚡ Activando servidor de análisis</span>
-          <span style={{ fontSize: '13px', fontWeight: 700, color: '#f5a623', background: '#2d4a35', padding: '2px 10px', borderRadius: '2px', minWidth: '40px', textAlign: 'center' }}>{countdown}s</span>
-          <span style={{ fontSize: '12px', color: '#4a6b52', letterSpacing: '0.1em' }}>Podés subir el video mientras esperas</span>
-        </div>
-      )}
-      {spaceReady && (
-        <div style={{ background: '#1a2e1a', borderBottom: '0.5px solid #2d4a35', padding: '10px 32px', textAlign: 'center' }}>
-          <span style={{ fontSize: '12px', color: '#4caf6e', letterSpacing: '0.1em' }}>✓ Servidor listo — podés analizar tu video</span>
-        </div>
-      )}
+      {/* Banner status Space */}
+      <div style={{ background: '#1a2e1a', borderBottom: '0.5px solid #2d4a35', padding: '10px 32px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px' }}>
+        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: status.dot }} />
+        <span style={{ fontSize: '12px', color: status.color, letterSpacing: '0.1em' }}>{status.text}</span>
+        {(spaceStatus === 'sleeping' || spaceStatus === 'error') && (
+          <button onClick={wakeSpace} style={{ marginLeft: '8px', fontSize: '11px', color: '#f5a623', background: 'transparent', border: '0.5px solid #f5a623', padding: '3px 12px', cursor: 'pointer', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+            ⚡ Despertar servidor
+          </button>
+        )}
+        {spaceStatus === 'waking' && (
+          <span style={{ fontSize: '12px', color: '#4a6b52', letterSpacing: '0.1em' }}>Esto puede tardar hasta 2 minutos...</span>
+        )}
+      </div>
 
       <div style={{ maxWidth: '640px', margin: '0 auto', padding: '48px 24px' }}>
 
@@ -435,9 +413,7 @@ export default function Dashboard() {
 
         {loading && (
           <div style={{ border: '0.5px solid #2d4a35', marginBottom: '24px' }}>
-            <div style={{ borderBottom: '0.5px solid #2d4a35' }}>
-              <CerebroAnimado />
-            </div>
+            <div style={{ borderBottom: '0.5px solid #2d4a35' }}><CerebroAnimado /></div>
             <div style={{ padding: '28px' }}>
               <p style={{ fontSize: '13px', letterSpacing: '0.18em', textTransform: 'uppercase', color: '#8aab7a', marginBottom: '24px' }}>Analizando activacion cerebral</p>
               {etapas.map(e => <EtapaBar key={e.id} label={e.label} pct={e.pct} activa={e.activa} completa={e.completa} />)}
@@ -447,8 +423,12 @@ export default function Dashboard() {
         )}
 
         {videoFile && !scores && !loading && (
-          <button onClick={handleAnalizar} style={{ width: '100%', marginTop: '8px', border: '0.5px solid #f5a623', background: 'transparent', color: '#f5a623', padding: '16px', fontSize: '14px', letterSpacing: '0.18em', textTransform: 'uppercase', cursor: 'pointer' }}>
-            Analizar video
+          <button
+            onClick={handleAnalizar}
+            disabled={spaceStatus !== 'ready'}
+            style={{ width: '100%', marginTop: '8px', border: `0.5px solid ${spaceStatus === 'ready' ? '#f5a623' : '#2d4a35'}`, background: 'transparent', color: spaceStatus === 'ready' ? '#f5a623' : '#4a6b52', padding: '16px', fontSize: '14px', letterSpacing: '0.18em', textTransform: 'uppercase', cursor: spaceStatus === 'ready' ? 'pointer' : 'not-allowed', opacity: spaceStatus === 'ready' ? 1 : 0.5 }}
+          >
+            {spaceStatus === 'ready' ? 'Analizar video' : spaceStatus === 'waking' ? 'Esperando servidor...' : 'Servidor no disponible'}
           </button>
         )}
 
